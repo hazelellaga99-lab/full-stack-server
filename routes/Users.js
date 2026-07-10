@@ -29,7 +29,13 @@ router.post("/login", async (req, res) => {
           { username: user.username, id: user.id },
           "importantsecret",
         );
-        res.json({ token: accessToken, username: user.username, id: user.id });
+        res.cookie("accessToken", accessToken, {
+          httpOnly: true,
+          sameSite: "lax",
+          secure: false,
+          maxAge: 60 * 60 * 24 * 1000,
+        });
+        res.json({ username: user.username, id: user.id });
         // res.json(accessToken);
       }
     });
@@ -38,6 +44,15 @@ router.post("/login", async (req, res) => {
 
 router.get("/auth", validateToken, (req, res) => {
   res.json(req.user);
+});
+
+router.get("/csrf-token", (req, res) => {
+  res.json({ csrfToken: req.csrfToken() });
+});
+
+router.post("/logout", (req, res) => {
+  res.clearCookie("accessToken");
+  res.json({ message: "Logged out successfully" });
 });
 
 router.get("/basicinfo/:id", async (req, res) => {
