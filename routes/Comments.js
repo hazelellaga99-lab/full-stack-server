@@ -1,50 +1,48 @@
 const express = require("express");
 const router = express.Router();
-const { Comments, Posts } = require("../models");
+const prisma = require("../prismaClient");
 const { validateToken } = require("../middlewares/AuthMiddleware");
 
 router.get("/:postId", async (req, res) => {
-  const postId = req.params.postId;
+  const postId = Number(req.params.postId);
 
-  const post = await Posts.findByPk(postId);
+  const post = await prisma.post.findUnique({ where: { id: postId } });
   if (!post) {
     return res.status(404).json({ error: "Post not found" });
   }
 
-  const comments = await Comments.findAll({
-    where: {
-      PostId: postId,
-    },
+  const comments = await prisma.comment.findMany({
+    where: { postId },
   });
   res.json(comments);
 });
 
 router.post("/", validateToken, async (req, res) => {
-  const comment = req.body;
+  const { PostId, commentBody } = req.body;
   const username = req.user.username;
 
-  const { PostId } = comment;
   if (!PostId) {
     return res.status(400).json({ error: "PostId is required" });
   }
 
-  const post = await Posts.findByPk(PostId);
+  const post = await prisma.post.findUnique({ where: { id: Number(PostId) } });
   if (!post) {
     return res.status(404).json({ error: "Post not found" });
   }
 
-  comment.username = username;
-  await Comments.create(comment);
+  const comment = await prisma.comment.create({
+    data: {
+      commentBody,
+      username,
+      postId: Number(PostId),
+    },
+  });
   res.json(comment);
 });
 
 router.delete("/:commentId", validateToken, async (req, res) => {
-  const commentId = req.params.commentId;
-  await Comments.destroy({
-    where: {
-      id: commentId,
-    },
-  });
+  const commentId = Number(req.params.commentId);
+  await prisma.comment.delete({ where: { id: commentId } });
   res.json("DELETED SUCCESSFULLY");
 });
 

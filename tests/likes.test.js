@@ -3,20 +3,20 @@ const express = require("express");
 
 describe("Likes route", () => {
   let app;
-  let mockModels;
+  let mockPrisma;
 
   beforeEach(() => {
-    mockModels = {
-      Posts: { findByPk: jest.fn() },
-      Likes: {
-        findOne: jest.fn(),
+    mockPrisma = {
+      post: { findUnique: jest.fn() },
+      like: {
+        findFirst: jest.fn(),
         create: jest.fn(),
-        destroy: jest.fn(),
+        delete: jest.fn(),
       },
     };
 
     jest.resetModules();
-    jest.doMock("../models", () => mockModels);
+    jest.doMock("../prismaClient", () => mockPrisma);
     // Mock auth middleware to bypass cookie/token verification in tests
     jest.doMock("../middlewares/AuthMiddleware", () => ({
       validateToken: (req, res, next) => {
@@ -44,16 +44,16 @@ describe("Likes route", () => {
   });
 
   test("returns 404 when post does not exist", async () => {
-    mockModels.Posts.findByPk.mockResolvedValue(null);
+    mockPrisma.post.findUnique.mockResolvedValue(null);
     const res = await request(app).post("/likes").send({ PostId: 123 });
     expect(res.status).toBe(404);
     expect(res.body.error).toMatch(/not found/i);
   });
 
   test("creates like when not found and returns liked true", async () => {
-    mockModels.Posts.findByPk.mockResolvedValue({ id: 1 });
-    mockModels.Likes.findOne.mockResolvedValue(null);
-    mockModels.Likes.create.mockResolvedValue({ PostId: 1, UserId: 2 });
+    mockPrisma.post.findUnique.mockResolvedValue({ id: 1 });
+    mockPrisma.like.findFirst.mockResolvedValue(null);
+    mockPrisma.like.create.mockResolvedValue({ postId: 1, userId: 2 });
 
     const res = await request(app).post("/likes").send({ PostId: 1 });
     expect(res.status).toBe(200);
@@ -61,9 +61,9 @@ describe("Likes route", () => {
   });
 
   test("destroys like when found and returns liked false", async () => {
-    mockModels.Posts.findByPk.mockResolvedValue({ id: 1 });
-    mockModels.Likes.findOne.mockResolvedValue({ id: 5 });
-    mockModels.Likes.destroy.mockResolvedValue(1);
+    mockPrisma.post.findUnique.mockResolvedValue({ id: 1 });
+    mockPrisma.like.findFirst.mockResolvedValue({ id: 5 });
+    mockPrisma.like.delete.mockResolvedValue({ id: 5 });
 
     const res = await request(app).post("/likes").send({ PostId: 1 });
     expect(res.status).toBe(200);

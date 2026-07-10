@@ -1,44 +1,31 @@
 const request = require("supertest");
 const express = require("express");
-const fs = require("fs");
 const path = require("path");
-const { Sequelize, DataTypes } = require("sequelize");
+const { execSync } = require("child_process");
 
-describe("Integration tests with sqlite in-memory", () => {
-  let app, db, sequelize;
+process.env.DATABASE_PROVIDER = "sqlite";
+process.env.DATABASE_URL = `file:${path.join(__dirname, "test.db")}`;
+
+const prisma = require("../prismaClient");
+
+describe("Integration tests with sqlite and Prisma", () => {
+  let app;
+  let testUser;
 
   beforeAll(async () => {
-    sequelize = new Sequelize({
-      dialect: "sqlite",
-      storage: ":memory:",
-      logging: console.log,
+    execSync("npx prisma db push", {
+      cwd: path.join(__dirname, ".."),
+      env: process.env,
+      stdio: "inherit",
     });
 
-    db = {};
-    const modelsDir = path.join(__dirname, "..", "models");
-    fs.readdirSync(modelsDir)
-      .filter((f) => f.endsWith(".js") && f !== "index.js")
-      .forEach((file) => {
-        const modelFactory = require(path.join(modelsDir, file));
-        const model = modelFactory(sequelize, DataTypes);
-        db[model.name] = model;
-      });
+    await prisma.$connect();
 
-    Object.keys(db).forEach((modelName) => {
-      if (db[modelName].associate) db[modelName].associate(db);
+    testUser = await prisma.user.create({
+      data: { username: "integ", password: "pw" },
     });
 
-    await sequelize.sync({ force: true });
-
-    // create a test user so foreign key constraints pass
-    const testUser = await db.Users.create({
-      username: "integ",
-      password: "pw",
-    });
-
-    // expose models to routes by mocking require and set validateToken to this user
     jest.resetModules();
-    jest.doMock("../models", () => db);
     jest.doMock("../middlewares/AuthMiddleware", () => ({
       validateToken: (req, res, next) => {
         req.user = { id: testUser.id, username: testUser.username };
@@ -56,23 +43,18 @@ describe("Integration tests with sqlite in-memory", () => {
   });
 
   afterAll(async () => {
-    if (sequelize) await sequelize.close();
+    await prisma.$disconnect();
   });
 
   test("create post and like it via real models", async () => {
-    // create a post directly via model
-    let post;
-    try {
-      post = await db.Posts.create({
+    const post = await prisma.post.create({
+      data: {
         title: "p",
         postText: "t",
         username: "u",
-        UserId: 1,
-      });
-    } catch (err) {
-      console.error("Post.create error:", err && err.message);
-      throw err;
-    }
+        userId: testUser.id,
+      },
+    });
 
     const res = await request(app).post("/likes").send({ PostId: post.id });
     expect(res.status).toBe(200);
@@ -80,18 +62,15 @@ describe("Integration tests with sqlite in-memory", () => {
   });
 
   test("create comment via real models", async () => {
-    let post;
-    try {
-      post = await db.Posts.create({
+    const post = await prisma.post.create({
+      data: {
         title: "p2",
         postText: "t",
         username: "u",
-        UserId: 1,
-      });
-    } catch (err) {
-      console.error("Post.create error:", err && err.message);
-      throw err;
-    }
+        userId: testUser.id,
+      },
+    });
+
     const res = await request(app)
       .post("/comments")
       .send({ PostId: post.id, commentBody: "hey" });

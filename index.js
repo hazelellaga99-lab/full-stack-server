@@ -1,3 +1,4 @@
+require("dotenv").config();
 const express = require("express");
 const app = express();
 const cors = require("cors");
@@ -17,7 +18,7 @@ app.use(
 const csrfProtection = csrf({ cookie: true });
 app.use(csrfProtection);
 
-const db = require("./models");
+const prisma = require("./prismaClient");
 
 // Routers
 const postsRouter = require("./routes/Posts");
@@ -29,8 +30,14 @@ app.use("/auth", usersRouter);
 const likesRouter = require("./routes/Likes");
 app.use("/likes", likesRouter);
 
-db.sequelize.sync().then(() => {
-  app.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`);
+prisma
+  .$connect()
+  .then(() => {
+    app.listen(PORT, () => {
+      console.log(`Server is running on port ${PORT}`);
+    });
+  })
+  .catch((err) => {
+    console.error("Failed to connect to the database:", err);
+    process.exit(1);
   });
-});

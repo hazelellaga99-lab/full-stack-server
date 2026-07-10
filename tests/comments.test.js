@@ -3,20 +3,20 @@ const express = require("express");
 
 describe("Comments route", () => {
   let app;
-  let mockModels;
+  let mockPrisma;
 
   beforeEach(() => {
-    mockModels = {
-      Posts: { findByPk: jest.fn() },
-      Comments: {
-        findAll: jest.fn(),
+    mockPrisma = {
+      post: { findUnique: jest.fn() },
+      comment: {
+        findMany: jest.fn(),
         create: jest.fn(),
-        destroy: jest.fn(),
+        delete: jest.fn(),
       },
     };
 
     jest.resetModules();
-    jest.doMock("../models", () => mockModels);
+    jest.doMock("../prismaClient", () => mockPrisma);
     // Mock auth middleware to bypass cookie/token verification in tests
     jest.doMock("../middlewares/AuthMiddleware", () => ({
       validateToken: (req, res, next) => {
@@ -38,15 +38,15 @@ describe("Comments route", () => {
   });
 
   test("GET returns 404 when post not found", async () => {
-    mockModels.Posts.findByPk.mockResolvedValue(null);
+    mockPrisma.post.findUnique.mockResolvedValue(null);
     const res = await request(app).get("/comments/999");
     expect(res.status).toBe(404);
     expect(res.body.error).toMatch(/not found/i);
   });
 
   test("GET returns comments when post exists", async () => {
-    mockModels.Posts.findByPk.mockResolvedValue({ id: 1 });
-    mockModels.Comments.findAll.mockResolvedValue([
+    mockPrisma.post.findUnique.mockResolvedValue({ id: 1 });
+    mockPrisma.comment.findMany.mockResolvedValue([
       { id: 1, commentBody: "hi" },
     ]);
     const res = await request(app).get("/comments/1");
@@ -60,7 +60,7 @@ describe("Comments route", () => {
   });
 
   test("POST returns 404 when post missing", async () => {
-    mockModels.Posts.findByPk.mockResolvedValue(null);
+    mockPrisma.post.findUnique.mockResolvedValue(null);
     const res = await request(app)
       .post("/comments")
       .send({ PostId: 5, commentBody: "a" });
@@ -68,8 +68,8 @@ describe("Comments route", () => {
   });
 
   test("POST creates comment when post exists", async () => {
-    mockModels.Posts.findByPk.mockResolvedValue({ id: 1 });
-    mockModels.Comments.create.mockResolvedValue({ id: 2, commentBody: "a" });
+    mockPrisma.post.findUnique.mockResolvedValue({ id: 1 });
+    mockPrisma.comment.create.mockResolvedValue({ id: 2, commentBody: "a" });
     const res = await request(app)
       .post("/comments")
       .send({ PostId: 1, commentBody: "a" });
